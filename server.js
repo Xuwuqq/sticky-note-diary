@@ -183,6 +183,8 @@ function publicNote(n) {
   const vids = (content.match(/<video\b/gi) || []).length;
   const auds = (content.match(/<audio\b/gi) || []).length;
   const m = /<img[^>]+src="([^"]+)"/i.exec(content);
+  // 封面兜底：没有图片时，用第一个视频的 poster（浏览器端截帧生成的封面图）
+  const mv = m ? null : /<video\b[^>]*\bposter="([^"]+)"/i.exec(content);
   return {
     id: n.id,
     title: n.title || '',
@@ -196,7 +198,7 @@ function publicNote(n) {
     trashed: !!n.trashed,
     trashedAt: n.trashedAt || null,
     media: { images: imgs, videos: vids, audios: auds },
-    cover: m ? m[1] : null,
+    cover: m ? m[1] : (mv ? mv[1] : null),
   };
 }
 function listNotes() {

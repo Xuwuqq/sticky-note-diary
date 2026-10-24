@@ -485,6 +485,8 @@ async function openEditor(id) {
   const sel = window.getSelection();
   sel.removeAllRanges();
   sel.addRange(range);
+  // 后台给没有封面的老视频补生成封面（不阻塞编辑器打开）
+  setTimeout(() => backfillVideoPosters(id), 400);
 }
 function closeEditor() {
   flushSave();
@@ -687,9 +689,89 @@ async function uploadAndInsert(file) {
     document.execCommand('insertHTML', false, html);
     onEditorInput();
     setSaveStatus('dirty');
+    if (file.type.indexOf('video/') === 0) {
+      // 后台生成视频封面（截帧 → 上传 → 写回 poster），不阻塞插入
+      const el = Array.from(document.querySelectorAll('#editorContent video'))
+        .find(v => v.getAttribute('src') === r.url);
+      if (el) attachVideoPoster(el, n.id);
+    }
   } catch (e) {
     toast('上传失败: ' + e.message, true);
     setSaveStatus('dirty');
+  }
+}
+
+/* ---------------- 视频封面（浏览器端截帧，零服务端依赖） ----------------
+   便携版不装 ffmpeg，改用浏览器自身解码视频：隐藏 <video>  seek 到中点前一秒，
+   canvas 抓帧转 JPEG。src 可以是 /media/... 地址；失败/超时返回 null，不阻塞主流程。 */
+function makeVideoPoster(src, timeoutMs) {
+  return new Promise(resolve => {
+    let done = false;
+    const finish = blob => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { URL.revokeObjectURL(v.src); } catch (e) { /* 非 blob 地址时忽略 */ }
+      resolve(blob);
+    };
+    const v = document.createElement('video');
+    v.muted = true;
+    v.preload = 'metadata';
+    const timer = setTimeout(() => finish(null), timeoutMs || 10000);
+    v.onloadedmetadata = () => {
+      try { v.currentTime = Math.min(1, (v.duration || 2) / 3); }
+      catch (e) { finish(null); }
+    };
+    v.onseeked = () => {
+      try {
+        const w = v.videoWidth, h = v.videoHeight;
+        if (!w || !h) { finish(null); return; }
+        const scale = Math.min(1, 720 / Math.max(w, h));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(w * scale));
+        c.height = Math.max(1, Math.round(h * scale));
+        c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+        c.toBlob(b => finish(b || null), 'image/jpeg', 0.72);
+      } catch (e) { finish(null); }
+    };
+    v.onerror = () => finish(null);
+    v.src = src;
+  });
+}
+
+/* 给一个 <video> 元素生成并上传封面，成功后把 poster 写回标签并触发保存 */
+const posterBusy = new WeakSet(); // 防止同一视频被重复截帧
+async function attachVideoPoster(videoEl, noteId) {
+  if (!videoEl || videoEl.getAttribute('poster') || posterBusy.has(videoEl)) return;
+  const src = videoEl.getAttribute('src') || '';
+  if (!src) return;
+  posterBusy.add(videoEl);
+  const blob = await makeVideoPoster(src, 10000);
+  if (!blob) { posterBusy.delete(videoEl); return; }
+  // 等待期间用户可能已关闭/切换日志，这里重新校验
+  if (!state.editing || state.editing.id !== noteId) { posterBusy.delete(videoEl); return; }
+  try {
+    const r = await api('/api/notes/' + noteId + '/media', {
+      method: 'PUT',
+      body: blob,
+      headers: { 'Content-Type': 'image/jpeg', 'x-filename': encodeURIComponent('封面_' + Date.now() + '.jpg') },
+    });
+    if (!state.editing || state.editing.id !== noteId) return;
+    if (!videoEl.isConnected) return;
+    videoEl.setAttribute('poster', r.url);
+    onEditorInput(); // 标记未保存，自动保存会带上新的 poster
+  } catch (e) { console.warn('封面上传失败', e); }
+  finally { posterBusy.delete(videoEl); }
+}
+
+/* 打开日志时给没有封面的老视频补生成（后台逐个进行，不阻塞编辑器） */
+async function backfillVideoPosters(noteId) {
+  const vids = Array.from(document.querySelectorAll('#editorContent video'))
+    .filter(v => !v.getAttribute('poster') && v.getAttribute('src'))
+    .slice(0, 5);
+  for (const v of vids) {
+    if (!state.editing || state.editing.id !== noteId) return;
+    await attachVideoPoster(v, noteId);
   }
 }
 function saveSelection() {
