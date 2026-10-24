@@ -20,7 +20,9 @@
 
 ## 下载
 
-前往 [Releases](releases) 页面下载 `便签日记_v1.0.zip`，解压后双击 `便签日记.exe` 使用。
+前往 [Releases](https://github.com/Xuwuqq/sticky-note-diary/releases) 页面下载 `便签日记_v1.0.zip`，解压后双击 `便签日记.exe` 使用。
+
+> 💡 仓库主页绿色 **Code** 按钮里的 “Download ZIP” 是 GitHub 自动生成的**源代码包**（`sticky-note-diary-main.zip`，只有源码、没有 exe，仅供开发者参考）。普通用户请下载上方 Releases 里的发布包。
 
 > ⚠️ **杀毒软件误报提示**：本程序未购买数字签名，且基于 Node.js 单文件技术构建，个别杀毒软件（如 360、Windows Defender）可能启发式误报。每个 Release 都附有 SHA256 校验值（见 `校验和.txt` 或 Release 说明），请核对后选择信任。你也可以参考下文「从源码构建」自行编译。
 
