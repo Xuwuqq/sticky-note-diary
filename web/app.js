@@ -497,22 +497,40 @@ function stopAllMedia() {
     try { el.pause(); } catch (e) { /* ignore */ }
   }
 }
+/* 判断一个元素是不是「媒体块」：整个块里只有 video/audio、没有文字。
+   contenteditable 里紧邻媒体块的位置（上方/下方）浏览器放不了光标。 */
+function isMediaBlock(el) {
+  if (!el) return false;
+  if (el.tagName === 'VIDEO' || el.tagName === 'AUDIO') return true;
+  return el.tagName === 'P' && !!el.querySelector('video,audio') && !el.textContent.trim();
+}
 /* 确保编辑器末尾有一个空段落，返回它；不需要处理时返回 null。
-   contenteditable 里最后一个元素是 video/audio 等媒体时，浏览器无法在它下方放置光标
-   （表现为「视频下方打不了字」「先放视频就彻底没法编辑」）。 */
+   （最后一个元素是视频/音频时，浏览器无法在它下方放置光标。） */
 function ensureTrailingParagraph() {
   const c = $('#editorContent');
   const last = c.lastElementChild;
-  if (!last) return null;                        // 空编辑器，浏览器自己可以处理
-  const endsWithMedia = last.tagName === 'VIDEO' || last.tagName === 'AUDIO' ||
-    (last.tagName === 'P' && last.querySelector('video,audio') && !last.textContent.trim());
-  if (!endsWithMedia) return null;               // 末尾是普通文本行，浏览器自己能处理
+  if (!last || !isMediaBlock(last)) return null;    // 空编辑器或末尾是文本行，浏览器自己能处理
   if (last.tagName === 'P' && !last.textContent.trim() && !last.querySelector('img,video,audio,hr')) {
-    return last;                                 // 末尾已是空行，复用
+    return last;                                    // 末尾已是空行，复用
   }
   const p = document.createElement('p');
   p.appendChild(document.createElement('br'));
   c.appendChild(p);
+  return p;
+}
+/* 确保编辑器开头有一个空段落，返回它；不需要处理时返回 null。
+   （第一个元素是视频/音频时，浏览器无法在它上方放置光标——「最开始放视频，
+   视频上面打不了字」就是这么来的。） */
+function ensureLeadingParagraph() {
+  const c = $('#editorContent');
+  const first = c.firstElementChild;
+  if (!first || !isMediaBlock(first)) return null;  // 空编辑器或开头是文本行，浏览器自己能处理
+  if (first.tagName === 'P' && !first.textContent.trim() && !first.querySelector('img,video,audio,hr')) {
+    return first;                                   // 开头已是空行，复用
+  }
+  const p = document.createElement('p');
+  p.appendChild(document.createElement('br'));
+  c.insertBefore(p, first);
   return p;
 }
 /* 把光标移入指定段落末尾（不传则移入编辑器最后一个块） */
@@ -1158,12 +1176,25 @@ function bindEvents() {
   });
   $('#editorTitle').addEventListener('input', onEditorInput);
   $('#editorContent').addEventListener('input', onEditorInput);
-  /* 点编辑器空白处（比如视频下方的空隙）：若末尾是视频/音频，
-     补一个空段落并把光标放进去——浏览器默认无法在媒体下方放置光标 */
+  /* 点编辑器空白处：若首/末元素是视频/音频，浏览器无法在其上/下方放置光标，
+     这里补一个空段落并把光标放进去（老笔记同样生效） */
   $('#editorContent').addEventListener('click', e => {
     if (e.target !== $('#editorContent') || !state.editing) return;
-    const p = ensureTrailingParagraph();
-    if (p) focusParagraph(p);
+    const c = $('#editorContent');
+    const first = c.firstElementChild, last = c.lastElementChild;
+    if (!first) return;                              // 空编辑器，浏览器自己可以处理
+    const y = e.clientY;
+    // 点在首块上方 → 补开头空行
+    if (isMediaBlock(first) && first.getBoundingClientRect().top > y) {
+      const p = ensureLeadingParagraph();
+      if (p) focusParagraph(p);
+      return;
+    }
+    // 点在末块下方 → 补末尾空行
+    if (isMediaBlock(last) && last.getBoundingClientRect().bottom < y) {
+      const p = ensureTrailingParagraph();
+      if (p) focusParagraph(p);
+    }
   });
   $('#fontDec').addEventListener('click', () => { state.fontSize = Math.max(14, state.fontSize - 1); applyFontSize(); });
   $('#fontInc').addEventListener('click', () => { state.fontSize = Math.min(24, state.fontSize + 1); applyFontSize(); });
