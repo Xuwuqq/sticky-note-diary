@@ -5,6 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
 ![Runtime](https://img.shields.io/badge/runtime-Node.js%2022-green.svg)
+[![下载最新版](https://img.shields.io/github/v/release/Xuwuqq/sticky-note-diary?label=%E4%B8%8B%E8%BD%BD%E6%9C%80%E6%96%B0%E7%89%88&color=blue)](https://github.com/Xuwuqq/sticky-note-diary/releases)
 
 ## 特性
 
