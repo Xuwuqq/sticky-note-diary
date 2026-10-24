@@ -497,6 +497,36 @@ function stopAllMedia() {
     try { el.pause(); } catch (e) { /* ignore */ }
   }
 }
+/* 确保编辑器末尾有一个空段落，返回它；不需要处理时返回 null。
+   contenteditable 里最后一个元素是 video/audio 等媒体时，浏览器无法在它下方放置光标
+   （表现为「视频下方打不了字」「先放视频就彻底没法编辑」）。 */
+function ensureTrailingParagraph() {
+  const c = $('#editorContent');
+  const last = c.lastElementChild;
+  if (!last) return null;                        // 空编辑器，浏览器自己可以处理
+  const endsWithMedia = last.tagName === 'VIDEO' || last.tagName === 'AUDIO' ||
+    (last.tagName === 'P' && last.querySelector('video,audio') && !last.textContent.trim());
+  if (!endsWithMedia) return null;               // 末尾是普通文本行，浏览器自己能处理
+  if (last.tagName === 'P' && !last.textContent.trim() && !last.querySelector('img,video,audio,hr')) {
+    return last;                                 // 末尾已是空行，复用
+  }
+  const p = document.createElement('p');
+  p.appendChild(document.createElement('br'));
+  c.appendChild(p);
+  return p;
+}
+/* 把光标移入指定段落末尾（不传则移入编辑器最后一个块） */
+function focusParagraph(p) {
+  const c = $('#editorContent');
+  const target = p || c.lastElementChild || c;
+  const range = document.createRange();
+  range.selectNodeContents(target);
+  range.collapse(false);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  c.focus();
+}
 function closeEditor() {
   flushSave();
   stopAllMedia();
@@ -699,6 +729,20 @@ async function uploadAndInsert(file) {
     document.execCommand('insertHTML', false, html);
     onEditorInput();
     setSaveStatus('dirty');
+    if (file.type.indexOf('video/') === 0 || file.type.indexOf('audio/') === 0) {
+      // 媒体落在内容末尾时，补一个空段落并把光标放进去：
+      // contenteditable 里最后一个元素是 video/audio 时，浏览器无法在它下方放置光标，
+      // 不补就会出现「视频下方打不了字」「先放视频就彻底没法编辑」
+      const inserted = Array.from(document.querySelectorAll('#editorContent video, #editorContent audio'))
+        .filter(el => el.getAttribute('src') === r.url).pop();
+      if (inserted) {
+        const block = inserted.closest('p') || inserted;
+        if (block === $('#editorContent').lastElementChild) {
+          const tp = ensureTrailingParagraph();
+          if (tp) focusParagraph(tp);
+        }
+      }
+    }
     if (file.type.indexOf('video/') === 0) {
       // 后台生成视频封面（截帧 → 上传 → 写回 poster），不阻塞插入
       const el = Array.from(document.querySelectorAll('#editorContent video'))
@@ -1114,6 +1158,13 @@ function bindEvents() {
   });
   $('#editorTitle').addEventListener('input', onEditorInput);
   $('#editorContent').addEventListener('input', onEditorInput);
+  /* 点编辑器空白处（比如视频下方的空隙）：若末尾是视频/音频，
+     补一个空段落并把光标放进去——浏览器默认无法在媒体下方放置光标 */
+  $('#editorContent').addEventListener('click', e => {
+    if (e.target !== $('#editorContent') || !state.editing) return;
+    const p = ensureTrailingParagraph();
+    if (p) focusParagraph(p);
+  });
   $('#fontDec').addEventListener('click', () => { state.fontSize = Math.max(14, state.fontSize - 1); applyFontSize(); });
   $('#fontInc').addEventListener('click', () => { state.fontSize = Math.min(24, state.fontSize + 1); applyFontSize(); });
 
