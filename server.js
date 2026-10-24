@@ -271,6 +271,58 @@ function openInExplorer(dir) {
   catch (e) { log('openInExplorer 失败', e); return false; }
 }
 
+/* ------------------------------------------------------------ 保存到桌面
+   Edge --app 应用模式会拦截 <a download> + blob 的浏览器下载（只生成 0 字节文件），
+   因此下载/导出统一改为「服务端直接写桌面」，用户可在资源管理器直接看到文件。 */
+function desktopDir() {
+  const candidates = [];
+  const home = os.homedir();
+  try {
+    if (process.env.USERPROFILE) {
+      candidates.push(path.join(process.env.USERPROFILE, 'Desktop'));
+      // OneDrive 重定向桌面：根目录名不固定（OneDrive / OneDrive - 公司名…），扫描一层
+      try {
+        for (const d of fs.readdirSync(process.env.USERPROFILE, { withFileTypes: true })) {
+          if (d.isDirectory() && /^OneDrive/i.test(d.name)) {
+            candidates.push(path.join(process.env.USERPROFILE, d.name, 'Desktop'));
+          }
+        }
+      } catch (e) { /* ignore */ }
+    }
+  } catch (e) { /* ignore */ }
+  candidates.push(path.join(home, 'Desktop'));
+  for (const c of candidates) {
+    try { if (fs.existsSync(c) && fs.statSync(c).isDirectory()) return c; } catch (e) { /* ignore */ }
+  }
+  return null;
+}
+/* 桌面目标路径，重名时自动追加 (2) (3)… */
+function uniqueDesktopPath(fileName) {
+  const dir = desktopDir() || os.homedir();
+  let dest = path.join(dir, fileName);
+  if (fs.existsSync(dest)) {
+    const ext = path.extname(fileName);
+    const base = fileName.slice(0, fileName.length - ext.length);
+    for (let i = 2; i < 1000; i++) {
+      dest = path.join(dir, base + ' (' + i + ')' + ext);
+      if (!fs.existsSync(dest)) break;
+    }
+  }
+  return dest;
+}
+/* 把已有文件复制到桌面，返回最终路径 */
+function copyFileToDesktop(srcPath, fileName) {
+  const dest = uniqueDesktopPath(fileName);
+  fs.copyFileSync(srcPath, dest);
+  return dest;
+}
+/* 把文本内容写到桌面，返回最终路径 */
+function writeTextToDesktop(text, fileName) {
+  const dest = uniqueDesktopPath(fileName);
+  fs.writeFileSync(dest, text);
+  return dest;
+}
+
 /* ------------------------------------------------------------ 纯 Node ZIP 打包/解包
    不调用 PowerShell，避免被安全软件拦截；小文件用 DEFLATE，大文件直接存储 */
 const CRC_TABLE = (() => {
@@ -687,7 +739,11 @@ async function handler(req, res) {
   }
   if (p === '/api/open-dir' && method === 'POST') {
     const body = await readJson(req);
-    const dir = body.dir === 'data' ? dataDir : (body.dir === 'app' ? ROOT : dataDir);
+    let dir;
+    if (body.dir === 'data') dir = dataDir;
+    else if (body.dir === 'app') dir = ROOT;
+    else if (body.dir === 'backups') dir = path.join(dataDir, 'backups');
+    else dir = dataDir;
     return sendJson(res, 200, { ok: openInExplorer(dir) });
   }
   if (p === '/api/data-dir' && method === 'POST') {
@@ -741,6 +797,21 @@ async function handler(req, res) {
     fs.createReadStream(fp).pipe(res);
     return;
   }
+  /* 保存备份到桌面（Edge app 模式浏览器下载不可用，改服务端直写） */
+  const mBackupSave = /^\/api\/backups\/(.+)\/save$/.exec(p);
+  if (mBackupSave && method === 'POST') {
+    const name = path.basename(decodeURIComponent(mBackupSave[1]));
+    const fp = path.join(dataDir, 'backups', name);
+    if (!fs.existsSync(fp)) return sendErr(res, 404, '备份不存在');
+    try {
+      const dest = copyFileToDesktop(fp, name);
+      log('备份已保存到桌面:', dest);
+      return sendJson(res, 200, { ok: true, savedPath: dest });
+    } catch (e) {
+      log('保存备份到桌面失败', e);
+      return sendErr(res, 500, '保存到桌面失败：' + e.message);
+    }
+  }
   if (mBackup && method === 'DELETE') {
     const name = path.basename(decodeURIComponent(mBackup[1]));
     try { fs.unlinkSync(path.join(dataDir, 'backups', name)); } catch (e) { return sendErr(res, 404, '备份不存在'); }
@@ -759,6 +830,17 @@ async function handler(req, res) {
     if (!note) return sendErr(res, 404, '日志不存在');
     const html = buildExportHtml(note);
     const title = (note.title || '无标题日志').replace(/[\\/:*?"<>|]/g, '_');
+    /* ?save=1：服务端直接写桌面（Edge app 模式浏览器下载不可用） */
+    if (u.searchParams.get('save') === '1') {
+      try {
+        const dest = writeTextToDesktop(html, title + '.html');
+        log('导出已保存到桌面:', dest);
+        return sendJson(res, 200, { ok: true, savedPath: dest });
+      } catch (e) {
+        log('保存导出到桌面失败', e);
+        return sendErr(res, 500, '保存到桌面失败：' + e.message);
+      }
+    }
     res.writeHead(200, {
       'Content-Type': 'text/html; charset=utf-8',
       'Content-Disposition': "attachment; filename=\"" + encodeURIComponent(title) + ".html\"; filename*=UTF-8''" + encodeURIComponent(title + '.html'),

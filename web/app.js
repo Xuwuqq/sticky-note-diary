@@ -371,10 +371,15 @@ async function cardMenuAction(id, act, val) {
       renderAll();
       toast('已彻底删除');
     } else if (act === 'export') {
-      const res = await api('/api/export/' + id);
-      const blob = await res.blob();
-      downloadBlob(blob, (n.title || '无标题日志') + '.html');
-      toast('已导出 HTML 文件');
+      /* 优先服务端保存到桌面；失败时退回浏览器下载（普通浏览器可用） */
+      try {
+        const r = await api('/api/export/' + id + '?save=1');
+        toast('已保存到桌面：' + r.savedPath);
+      } catch (e) {
+        const res = await api('/api/export/' + id);
+        downloadBlob(await res.blob(), (n.title || '无标题日志') + '.html');
+        toast('已导出 HTML 文件（浏览器下载）');
+      }
     }
   } catch (e) { toast(e.message, true); }
 }
@@ -882,8 +887,14 @@ function backupTableHtml(backups) {
 async function backupAction(act, name) {
   try {
     if (act === 'down') {
-      const res = await api('/api/backups/' + encodeURIComponent(name));
-      downloadBlob(await res.blob(), name);
+      /* 服务端直接保存到桌面（Edge app 模式下浏览器下载只会生成 0 字节文件） */
+      try {
+        const r = await api('/api/backups/' + encodeURIComponent(name) + '/save', { method: 'POST' });
+        toast('已保存到桌面：' + r.savedPath);
+      } catch (e) {
+        await api('/api/open-dir', { method: 'POST', body: { dir: 'backups' } });
+        toast('保存到桌面失败（' + e.message + '），已打开备份文件夹，请手动复制', true);
+      }
     } else if (act === 'del') {
       const ok = await confirmDialog('确定删除备份「' + escapeHtml(name) + '」吗？', '删除');
       if (!ok) return;
@@ -986,10 +997,16 @@ function bindEvents() {
       const act = t.dataset.eact;
       if (act === 'export') {
         try {
-          const res = await api('/api/export/' + n.id);
-          downloadBlob(await res.blob(), (n.title || '无标题日志') + '.html');
-          toast('已导出 HTML 文件');
-        } catch (err) { toast(err.message, true); }
+          /* 优先服务端保存到桌面；失败时退回浏览器下载（普通浏览器可用） */
+          const r = await api('/api/export/' + n.id + '?save=1');
+          toast('已保存到桌面：' + r.savedPath);
+        } catch (err) {
+          try {
+            const res = await api('/api/export/' + n.id);
+            downloadBlob(await res.blob(), (n.title || '无标题日志') + '.html');
+            toast('已导出 HTML 文件（浏览器下载）');
+          } catch (err2) { toast(err2.message, true); }
+        }
       } else if (act === 'trash') {
         await flushSave();
         try {
