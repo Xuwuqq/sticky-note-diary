@@ -461,6 +461,7 @@ function setNoteColor(color) {
 }
 async function openEditor(id) {
   await flushSave();
+  stopAllMedia(); // 旧日志里可能还有没停的视频/声音，先停掉再换内容
   let full;
   try {
     full = (await api('/api/notes/' + id)).note;
@@ -488,8 +489,17 @@ async function openEditor(id) {
   // 后台给没有封面的老视频补生成封面（不阻塞编辑器打开）
   setTimeout(() => backfillVideoPosters(id), 400);
 }
+/* 暂停编辑器里所有音视频（退出/切换日志时调用）。
+   编辑器是「隐藏」而非「移除」，不显式 pause 的话视频声音会一直在后台放。 */
+function stopAllMedia() {
+  const els = document.querySelectorAll('#editorContent video, #editorContent audio');
+  for (const el of els) {
+    try { el.pause(); } catch (e) { /* ignore */ }
+  }
+}
 function closeEditor() {
   flushSave();
+  stopAllMedia();
   $('#editor').classList.add('hidden');
   state.editing = null;
   state.dirty = false;

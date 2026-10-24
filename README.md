@@ -31,8 +31,8 @@
 
 | 文件 | SHA256 |
 |---|---|
-| `便签日记_v1.0.zip` | `de69be162b717d10d89d58a72015f9d062403e0acad7eab113dea7db41f8d475` |
-| `便签日记.exe`（包内） | `6876e64c38a45c650c0c7ede5800940a831cab074b81420131e26aa6b5889237` |
+| `便签日记_v1.0.zip` | `bfe3b357f4212d651fb72a42968fe949b8c09ba65793525e471ba8f5c0b9f85a` |
+| `便签日记.exe`（包内） | `44eaf2287bdacbdbd0415dfbdf19f4fe9a79f671a31aab87c0f75a79bb26fe5a` |
 
 ## 系统要求
 
