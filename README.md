@@ -31,8 +31,8 @@
 
 | 文件 | SHA256 |
 |---|---|
-| `便签日记_v1.0.zip` | `c0c8e232a95ae8350ad49cb507d735793f6c644f53053fb63fe41d9ff7c91887` |
-| `便签日记.exe`（包内） | `880d8b2727df278e481ee76bb1b2f81561de1cd1fcfd014c06c84a166439ef7d` |
+| `便签日记_v1.0.zip` | `18a860fd310ab14a47e64639a3c425f662b5c53e574a08e50475fc5357381c74` |
+| `便签日记.exe`（包内） | `f57fa026f85e95e4d3a5f294567066e7e6e713a0258f5c5015a548b73c6d00e5` |
 
 ## 系统要求
 
@@ -70,7 +70,10 @@ node build_exe.js
 │   ├── app.js
 │   └── style.css
 ├── build_exe.js         # SEA 单文件构建脚本
+├── assets/
+│   └── icon.ico         # 应用图标（构建时写入 exe，替代 Node 默认图标）
 ├── 使用说明.txt          # 用户手册
+├── 备用启动.vbs          # exe 双击异常时的备用启动方式
 ├── third-party-licenses/
 │   └── Node.js-LICENSE.txt   # Node.js 许可证（exe 内嵌 Node 运行时）
 └── LICENSE              # 本项目许可证 (MIT)

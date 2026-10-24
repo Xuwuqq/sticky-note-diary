@@ -1,13 +1,14 @@
 'use strict';
 /**
  * 构建脚本：把「便签日记」打包成单个 SEA exe（便签日记.exe）
- * 流程：暂存 server.js + web 资产 → 生成 SEA blob → 注入 Node 副本 → PE 子系统改为 GUI（无黑窗）
+ * 流程：暂存 server.js + web 资产 → 生成 SEA blob → 复制 Node → 写入图标/版本信息
+ *      → 注入 blob → PE 子系统改为 GUI（无黑窗）
  *
  * 用法（Windows）：
  *   1. 安装 Node.js 22+（或把 node.exe 放到 runtime/ 目录）
- *   2. npm install postject
+ *   2. npm install postject rcedit
  *   3. node build_exe.js
- * 产物：dist-exe/便签日记.exe
+ * 产物：dist-exe/便签日记.exe（图标取 assets/icon.ico，缺失则保持 Node 默认图标）
  */
 const fs = require('fs');
 const path = require('path');
@@ -31,6 +32,17 @@ function resolvePostject() {
   } catch (e) { /* not found */ }
   if (process.env.POSTJECT_CLI && fs.existsSync(process.env.POSTJECT_CLI)) return process.env.POSTJECT_CLI;
   throw new Error('未找到 postject，请先执行: npm install postject');
+}
+/* 加载 rcedit：兼容 4.x（CommonJS 默认导出）与 5.x（ESM 命名导出） */
+async function loadRcedit() {
+  let resolved = null;
+  try { resolved = require.resolve('rcedit'); } catch (e) { /* not found */ }
+  if (!resolved && process.env.RCEDIT_PATH && fs.existsSync(process.env.RCEDIT_PATH)) resolved = process.env.RCEDIT_PATH;
+  if (!resolved) throw new Error('未找到 rcedit，请先执行: npm install rcedit');
+  const mod = await import(require('url').pathToFileURL(resolved).href);
+  const fn = mod.rcedit || mod.default;
+  if (typeof fn !== 'function') throw new Error('rcedit 加载失败：未知的导出形式');
+  return fn;
 }
 /* 从 Node 二进制中提取 SEA fuse 标记（不同 Node 版本值不同，必须动态提取） */
 function findFuse(nodePath) {
@@ -82,12 +94,35 @@ function step(msg) { console.log('\n==> ' + msg); }
   const exe = path.join(DIST, '便签日记.exe');
   fs.copyFileSync(NODE, exe);
 
-  /* 5. 注入 blob */
+  /* 5. 写入图标与版本信息（在 SEA 注入前改资源段，不影响注入结构） */
+  step('写入图标与版本信息');
+  const ICON = path.join(APP, 'assets', 'icon.ico');
+  if (fs.existsSync(ICON)) {
+    const rcedit = await loadRcedit();
+    await rcedit(exe, {
+      icon: ICON,
+      'file-version': '1.0.0.0',
+      'product-version': '1.0.0.0',
+      'version-string': {
+        ProductName: '便签日记',
+        FileDescription: '便签日记 — Windows 便携单文件日记应用',
+        CompanyName: '便签日记 contributors',
+        InternalName: 'StickyNoteDiary',
+        OriginalFilename: '便签日记.exe',
+        LegalCopyright: 'Copyright (c) 2026 便签日记 contributors (MIT)',
+      },
+    });
+    console.log('    图标: ' + ICON);
+  } else {
+    console.log('    未找到 assets/icon.ico，保持 Node 默认图标');
+  }
+
+  /* 6. 注入 blob */
   step('注入 SEA blob');
   execFileSync(NODE, [POSTJECT, exe, 'NODE_SEA_BLOB', 'sea-prep.blob', '--sentinel-fuse', FUSE],
     { cwd: DIST, stdio: 'inherit' });
 
-  /* 6. PE 子系统改为 GUI（双击不出现黑色控制台窗口） */
+  /* 7. PE 子系统改为 GUI（双击不出现黑色控制台窗口） */
   step('修改 PE 子系统为 GUI');
   const before = patchSubsystem(exe);
   console.log('    subsystem: ' + before + ' (CONSOLE) -> 2 (WINDOWS_GUI)');
