@@ -273,7 +273,7 @@ function cardHtml(n, isTrash) {
   if (n.media.images) media.push('<span>' + icon('image', 13) + n.media.images + '</span>');
   if (n.media.videos) media.push('<span>' + icon('video', 13) + n.media.videos + '</span>');
   if (n.media.audios) media.push('<span>' + icon('audio', 13) + n.media.audios + '</span>');
-  return '<div class="card c-' + n.color + (n.pinned && !isTrash ? ' pinned' : '') + '" data-id="' + n.id + '">' +
+  return '<div class="card c-' + n.color + (n.cover ? ' has-cover' : '') + (n.pinned && !isTrash ? ' pinned' : '') + '" data-id="' + n.id + '">' +
     (n.pinned && !isTrash ? '<div class="card-pin">📌</div>' : '') +
     '<button class="card-menu" data-menu="' + n.id + '" title="更多">' +
       '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>' +

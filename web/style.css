@@ -162,6 +162,7 @@ input, select { font-family: inherit; color: inherit; }
   flex: 1; overflow-y: auto;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+  grid-auto-rows: minmax(280px, max-content);
   gap: 16px;
   padding: 22px;
   align-content: start;
@@ -180,30 +181,39 @@ input, select { font-family: inherit; color: inherit; }
   overflow: hidden;
 }
 .card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+/* 卡片内任何区块都不允许被 flex 压缩：一旦压缩，-webkit-line-clamp 会把最后一行
+   文字水平「腰斩」（只剩上半截），封面图也会被压扁，有封面的卡片最明显 */
+.card > * { flex-shrink: 0; }
 .card-cover {
   margin: -15px -16px 12px;
-  height: 124px; overflow: hidden;
+  height: 96px; flex: 0 0 96px; overflow: hidden;
   background: var(--bg);
 }
 .card-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .card-title {
   font-size: 15.5px; font-weight: 700; line-height: 1.4;
   margin-bottom: 6px;
+  max-height: calc(1.4em * 2);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
   word-break: break-word;
 }
 .card-title.untitled { color: var(--muted); font-weight: 500; }
 .card-snippet {
   font-size: 13px; color: var(--text-2); line-height: 1.65;
+  max-height: calc(1.65em * 4);
   display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
   word-break: break-word;
-  flex: 1;
+  flex: 0 0 auto;   /* 不能用 flex:1，否则高度被 flex 分配，最后一行会被裁成半行 */
+}
+/* 有封面时封面已占去高度，摘要只显示 2 行，避免该行被拉得过高 */
+.card.has-cover .card-snippet {
+  -webkit-line-clamp: 2; max-height: calc(1.65em * 2);
 }
 .card-media { display: flex; gap: 10px; margin-top: 8px; font-size: 12px; color: var(--muted); }
 .card-media span { display: inline-flex; align-items: center; gap: 4px; }
 .card-footer {
   display: flex; align-items: center; gap: 8px;
-  margin-top: 10px; padding-top: 9px;
+  margin-top: auto; padding-top: 9px;
   border-top: 1px dashed var(--card-border, var(--border));
   font-size: 12px; color: var(--muted);
 }
